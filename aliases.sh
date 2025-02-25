@@ -10,3 +10,6 @@ alias switchbranch="pnpm i && pnpm run build-dev"
 alias git-search='f() { git branch --format="%(refname:short)" | xargs -I {} git grep "$1" {}; }; f'
 
 alias test="cd /Users/neriyarosner/WebstormProjects/doorloop/server && NODE_OPTIONS=--max-old-space-size=65536 node /Users/neriyarosner/WebstormProjects/doorloop/node_modules/jest/bin/jest.js -c /Users/neriyarosner/WebstormProjects/doorloop/server/jest.config.js --runInBand"
+
+alias editrc="code ~/.zshrc"
+alias pullall="git fetch --all && git pull --all"
