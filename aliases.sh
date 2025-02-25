@@ -1,6 +1,7 @@
 # Project paths
 export DOORLOOP_PATH="$HOME/WebstormProjects/doorloop"
 export SERVER_PATH="$DOORLOOP_PATH/server"
+export CLIENT_PATH="$DOORLOOP_PATH/client"
 
 
 alias stricttoggle="sed -e 's/\"strictNullChecks\": true/\"strictNullChecks\": false/;s/\"strictNullChecks\": false/\"strictNullChecks\": true/' $SERVER_PATH/tsconfig.json > $SERVER_PATH/tsconfig.json.tmp && mv $SERVER_PATH/tsconfig.json.tmp $SERVER_PATH/tsconfig.json"
@@ -16,6 +17,8 @@ alias git-search='f() { git branch --format="%(refname:short)" | xargs -I {} git
 
 alias editrc="code ~/.zshrc"
 alias pullall="git fetch --all && git pull --all"
+
+alias storybook="cd $CLIENT_PATH && pnpm run storybook"
 
 servertest() {
     DYNAMIC_TEST_PATH="**/*.test.ts"
