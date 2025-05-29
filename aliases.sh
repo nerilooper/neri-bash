@@ -1,3 +1,10 @@
+
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
 # Project paths
 if [[ "$(pwd)" == *"/server"* ]]; then
     export SERVER_PATH=$(pwd)
@@ -20,8 +27,10 @@ alias aicli="gh copilot suggest"
 alias switchbranch="pnpm i && pnpm run build-dev"
 alias git-search='f() { git branch --format="%(refname:short)" | xargs -I {} git grep "$1" {}; }; f'
 
-alias editrc="code ~/.zshrc"
-alias pullall="git fetch --all && git pull --all"
+alias editrc="cursor ~/.zshrc"
+alias editprofile="cursor ~/.zprofile"
+
+alias prs="gh pr list --author=\"@me\" --search \"sort:updated-desc\""
 
 alias storybook="cd $CLIENT_PATH && pnpm run storybook"
 
