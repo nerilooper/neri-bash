@@ -17,6 +17,8 @@ TOTAL_FILES=0
 FILES_WITH_CIRCULAR_DEPS=0
 CIRCULAR_DEPS_FOUND=0
 
+
+
 # Function to print colored output
 print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -44,7 +46,7 @@ check_git_repo() {
     local repo_root
     repo_root=$(git rev-parse --show-toplevel)
     print_info "Git repository root: $repo_root"
-    print_info "Current directory: $(pwd)"
+
 }
 
 # Function to check if madge is installed
@@ -58,17 +60,21 @@ check_dependencies() {
 # Function to get the base branch
 get_base_branch() {
     local base_branch=""
-    if git show-ref --verify --quiet refs/remotes/origin/main; then
-        base_branch="origin/main"
-    elif git show-ref --verify --quiet refs/remotes/origin/master; then
-        base_branch="origin/master"
+
+    # Try to get base branch from GitHub PR first
+    if command -v gh &> /dev/null; then
+        base_branch=$(gh pr view --json baseRefName --jq '.baseRefName' 2>/dev/null || true)
+        
+        if [ -n "$base_branch" ]; then
+            base_branch="origin/$base_branch"
+            echo "$base_branch"
+            return 0
+        else
+            print_warning "Could not get base branch from GitHub PR (not in a PR or gh command failed)" >&2
+        fi
     else
-        print_error "Could not find origin/main or origin/master branch"
-        exit 1
+        print_warning "GitHub CLI (gh) not installed, falling back to default branch detection" >&2
     fi
-    
-    print_info "Using base branch: $base_branch"
-    echo "$base_branch"
 }
 
 # Function to get changed files in the current PR
@@ -76,6 +82,8 @@ get_changed_files() {
     local base_branch="$1"
     local current_branch
     current_branch=$(git branch --show-current)
+    
+    print_info "Current branch: $current_branch" >&2
     
     print_info "Comparing branches:"
     print_info "  Current branch: $current_branch"
@@ -96,11 +104,7 @@ get_changed_files() {
         return 1
     fi
     
-    print_info "Files changed in PR ($current_branch vs $base_branch):"
-    echo "$changed_files" | while read -r file; do
-        echo "  - $file"
-    done >&2  # Send to stderr so it doesn't interfere with return value
-    echo "" >&2
+    print_info "Found $(echo "$changed_files" | wc -l | tr -d ' ') changed files in PR ($current_branch vs $base_branch)" >&2
     
     echo "$changed_files"
 }
@@ -164,7 +168,7 @@ analyze_file() {
     fi
     
     if [ ! -f "$full_path" ]; then
-        print_warning "File not found: $file (may have been deleted)"
+        print_warning "File not found: $file (may have been deleted)" >&2
         return
     fi
     
@@ -181,13 +185,43 @@ analyze_file() {
         
         if [ -n "$filtered_circular" ]; then
             FILES_WITH_CIRCULAR_DEPS=$((FILES_WITH_CIRCULAR_DEPS + 1))
-            print_error "Circular dependencies involving $file:"
-            echo "$filtered_circular" | sed 's/^/    /'
             
             # Count the number of circular dependency chains
             local chains
             chains=$(echo "$filtered_circular" | grep -c ">" || true)
             CIRCULAR_DEPS_FOUND=$((CIRCULAR_DEPS_FOUND + chains))
+            
+            print_error "Circular dependencies involving $file:"
+            
+            if [ $chains -le 10 ]; then
+                # Show all if 10 or fewer
+                echo "$filtered_circular" | sed 's/^/    /'
+            else
+                # Show first 10 and save all to file
+                print_info "Showing first 10 of $chains circular dependencies:"
+                echo "$filtered_circular" | head -10 | sed 's/^/    /'
+                
+                # Create filename with suffix
+                local file_base=$(basename "$file" | sed 's/\.[^.]*$//')
+                local output_file="circular-deps-${file_base}-$(date +%Y%m%d-%H%M%S).txt"
+                
+                echo ""
+                print_warning "⚠️  Found $chains circular dependencies in $file (showing first 10)"
+                print_info "All circular dependencies for $file saved to: $output_file"
+                
+                # Save all dependencies to file
+                {
+                    echo "Circular Dependencies Report for: $file"
+                    echo "Generated: $(date)"
+                    echo "Repository: $(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+                    echo "Branch: $(git branch --show-current 2>/dev/null || 'unknown')"
+                    echo "Total circular dependencies found: $chains"
+                    echo ""
+                    echo "=== CIRCULAR DEPENDENCIES ==="
+                    echo ""
+                    echo "$filtered_circular"
+                } > "$output_file"
+            fi
             echo ""
         else
             print_success "No circular dependencies involving $file"
@@ -237,11 +271,14 @@ main() {
     
     local base_branch
     base_branch=$(get_base_branch)
+    print_info "Base branch: $base_branch"
     
+
     local changed_files
     if ! changed_files=$(get_changed_files "$base_branch"); then
         exit 0
     fi
+
     
     local js_ts_files
     if ! js_ts_files=$(filter_js_ts_files "$changed_files"); then
