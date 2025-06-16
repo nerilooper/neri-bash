@@ -29,20 +29,28 @@ SAVE_FILES=false
 # Specific file override
 SPECIFIC_FILE=""
 
+# Exclude pattern
+EXCLUDE_PATTERN=""
+
 # Function to display help message
 show_help() {
-    echo "Usage: $0 [--verbose|-v] [--base BRANCH] [--save|-s] [--file FILE] [--help|-h]"
+    echo "Usage: $0 [--verbose|-v] [--base BRANCH] [--save|-s] [--file FILE] [--exclude PATTERN] [--help|-h]"
     echo ""
     echo "Options:"
-    echo "  --verbose, -v    Show detailed output including info and success messages"
-    echo "  --base BRANCH    Specify the base branch to compare against (overrides auto-detection)"
-    echo "  --save, -s       Save detailed circular dependency reports to files"
-    echo "  --file FILE      Analyze a specific file instead of PR changed files"
-    echo "  --help, -h       Show this help message"
+    echo "  --verbose, -v      Show detailed output including info and success messages"
+    echo "  --base BRANCH      Specify the base branch to compare against (overrides auto-detection)"
+    echo "  --save, -s         Save detailed circular dependency reports to files"
+    echo "  --file FILE        Analyze a specific file instead of PR changed files"
+    echo "  --exclude PATTERN  Exclude files matching the glob pattern (shown in red)"
+    echo "  --help, -h         Show this help message"
     echo ""
     echo "By default, only errors and warnings are shown."
     echo "The base branch is auto-detected from GitHub PR or falls back to origin/main."
     echo "When --file is used, the base branch comparison is skipped."
+    echo ""
+    echo "Examples:"
+    echo "  $0 --exclude '*.test.js'     # Exclude test files"
+    echo "  $0 --exclude 'src/legacy/*'  # Exclude legacy directory"
 }
 
 # Function to validate file path and convert to absolute path
@@ -102,6 +110,14 @@ parse_args() {
             SPECIFIC_FILE="$2"
             shift 2
             ;;
+        --exclude)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --exclude requires a pattern"
+                exit 1
+            fi
+            EXCLUDE_PATTERN="$2"
+            shift 2
+            ;;
         --help | -h)
             show_help
             exit 0
@@ -118,7 +134,7 @@ parse_args() {
 # Function to print colored output
 print_info() {
     if [ "$VERBOSE" = true ]; then
-        echo -e "${BLUE}[INFO]${NC} $1"
+        echo -e "${BLUE}[INFO]${NC} $1" >&2
     fi
 }
 
@@ -231,6 +247,35 @@ get_changed_files() {
     echo "$changed_files"
 }
 
+# Function to check if a file matches the exclude pattern
+file_matches_exclude_pattern() {
+    local file="$1"
+    local pattern="$2"
+
+    if [ -z "$pattern" ]; then
+        return 1 # No pattern means no match
+    fi
+
+    # Use bash's built-in pattern matching
+    if [[ "$file" == $pattern ]]; then
+        return 0 # Match found
+    fi
+
+    return 1 # No match
+}
+
+# Function to display file with appropriate color
+display_file_status() {
+    local file="$1"
+    local is_excluded="$2"
+
+    if [ "$is_excluded" = "true" ]; then
+        echo -e "  - ${RED}$file (excluded)${NC}" >&2
+    else
+        echo "  - $file" >&2
+    fi
+}
+
 # Function to filter for JavaScript/TypeScript files
 filter_js_ts_files() {
     local changed_files="$1"
@@ -242,13 +287,52 @@ filter_js_ts_files() {
         return 1
     fi
 
-    print_info "JavaScript/TypeScript files to analyze:"
-    echo "$js_ts_files" | while read -r file; do
-        echo "  - $file"
-    done >&2 # Send to stderr so it doesn't interfere with return value
+    local files_to_analyze=""
+    local excluded_count=0
+    local total_count=0
+
+    # First pass: collect files and count exclusions
+    while IFS= read -r file; do
+        if [ -n "$file" ]; then
+            total_count=$((total_count + 1))
+
+            if file_matches_exclude_pattern "$file" "$EXCLUDE_PATTERN"; then
+                excluded_count=$((excluded_count + 1))
+            else
+                if [ -z "$files_to_analyze" ]; then
+                    files_to_analyze="$file"
+                else
+                    files_to_analyze="$files_to_analyze"$'\n'"$file"
+                fi
+            fi
+        fi
+    done <<<"$js_ts_files"
+
+    # Display the files with proper formatting
+    print_info "JavaScript/TypeScript files found:"
+    while IFS= read -r file; do
+        if [ -n "$file" ]; then
+            if file_matches_exclude_pattern "$file" "$EXCLUDE_PATTERN"; then
+                display_file_status "$file" "true"
+            else
+                display_file_status "$file" "false"
+            fi
+        fi
+    done <<<"$js_ts_files"
+
     echo "" >&2
 
-    echo "$js_ts_files"
+    if [ -n "$EXCLUDE_PATTERN" ]; then
+        print_info_must "Excluded $excluded_count of $total_count files matching pattern: $EXCLUDE_PATTERN"
+        echo "" >&2
+    fi
+
+    if [ -z "$files_to_analyze" ]; then
+        print_warning "No JavaScript/TypeScript files to analyze after applying exclusions"
+        return 1
+    fi
+
+    echo "$files_to_analyze"
 }
 
 # Function to filter circular dependencies for a specific file
