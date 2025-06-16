@@ -1,46 +1,63 @@
+# Initialize development environment
+init_dev_env() {
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 
-eval "$(/opt/homebrew/bin/brew shellenv)"
+    export BUN_INSTALL="$HOME/.bun" 
+    export PATH="$BUN_INSTALL/bin:$PATH" 
+}
 
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+# Set up project paths
+setup_project_paths() {
+    # Project paths
+    if [[ "$(pwd)" == *"/apps/server"* ]]; then
+        export DOORLOOP_PATH="$(dirname "$(dirname "$(pwd)")")"
+    else
+        export DOORLOOP_PATH=$(pwd)
+    fi
 
-# Project paths
-if [[ "$(pwd)" == *"/server"* ]]; then
-    export SERVER_PATH=$(pwd)
-    export DOORLOOP_PATH="$(dirname "$SERVER_PATH")"
-else
-    export DOORLOOP_PATH=$(pwd)
     export SERVER_PATH="$DOORLOOP_PATH/apps/server"
-fi
+    export CLIENT_PATH="$DOORLOOP_PATH/apps/client"
+}
 
-export CLIENT_PATH="$DOORLOOP_PATH/apps/client"
+# Create TypeScript strict mode aliases
+setup_strict_aliases() {
+    alias stricttoggle="sed -e 's/\"strictNullChecks\": true/\"strictNullChecks\": false/;s/\"strictNullChecks\": false/\"strictNullChecks\": true/' $SERVER_PATH/tsconfig.json > $SERVER_PATH/tsconfig.json.tmp && mv $SERVER_PATH/tsconfig.json.tmp $SERVER_PATH/tsconfig.json"
+    alias stricton="sed -i '' 's/\"strictNullChecks\": false/\"strictNullChecks\": true/' $SERVER_PATH/tsconfig.json"
+    alias strictoff="sed -i '' 's/\"strictNullChecks\": true/\"strictNullChecks\": false/' $SERVER_PATH/tsconfig.json"
+}
 
-alias stricttoggle="sed -e 's/\"strictNullChecks\": true/\"strictNullChecks\": false/;s/\"strictNullChecks\": false/\"strictNullChecks\": true/' $SERVER_PATH/tsconfig.json > $SERVER_PATH/tsconfig.json.tmp && mv $SERVER_PATH/tsconfig.json.tmp $SERVER_PATH/tsconfig.json"
-alias stricton="sed -i '' 's/\"strictNullChecks\": false/\"strictNullChecks\": true/' $SERVER_PATH/tsconfig.json"
-alias strictoff="sed -i '' 's/\"strictNullChecks\": true/\"strictNullChecks\": false/' $SERVER_PATH/tsconfig.json"
+# Create validation aliases
+setup_validation_aliases() {
+    alias val="strictoff && pnpm run build:packages && (pnpm run type-check & pnpm run lint & pnpm run format:check) && wait && stricton"
+    alias valfull="pnpm i && pnpm run build-prod && (strictoff && pnpm run type-check-strict && stricton)"
+}
 
-alias val="strictoff && pnpm run build:packages && (pnpm run type-check & pnpm run lint & pnpm run format:check) && wait && stricton"
-alias valfull="pnpm i && pnpm run build-prod && (strictoff && pnpm run type-check-strict && stricton)"
+# Create general utility aliases
+setup_utility_aliases() {
+    alias aicli="gh copilot suggest"
+    alias switchbranch="pnpm i && pnpm run build-dev"
+    alias git-search='f() { git branch --format="%(refname:short)" | xargs -I {} git grep "$1" {}; }; f'
+    alias editrc="cursor ~/.zshrc"
+    alias editprofile="cursor ~/.zprofile"
+    alias pullall="git fetch --all && git pull --all"
+}
 
-alias aicli="gh copilot suggest"
-alias switchbranch="pnpm i && pnpm run build-dev"
-alias git-search='f() { git branch --format="%(refname:short)" | xargs -I {} git grep "$1" {}; }; f'
+# Create development-specific aliases
+setup_dev_aliases() {
+    alias storybook="cd $CLIENT_PATH && pnpm run storybook"
+    alias docker-debug="pnpm docker-bootstrap 651d09f9a3895d22c843074a && USE_DOCKER=true pnpm debug-dev"
+}
 
-alias editrc="cursor ~/.zshrc"
-alias editprofile="cursor ~/.zprofile"
-
-alias prs="gh pr list --author=\"@me\" --search \"sort:updated-desc\""
-
-alias storybook="cd $CLIENT_PATH && pnpm run storybook"
-
-alias docker-debug="pnpm docker-bootstrap 651d09f9a3895d22c843074a && USE_DOCKER=true pnpm debug-dev"
-
+# Server test function
 servertest() {
     DYNAMIC_TEST_PATH="**/*.test.ts"
     TEST_NAME_FILTER=""
     TARGET_PATH="$SERVER_PATH"
     JEST_CONFIG="$SERVER_PATH/jest.config.ts"
+    NODE_MODULES_PATH="$DOORLOOP_PATH/node_modules"
+    NODE_OPTIONS="--max-old-space-size=65536 --experimental-vm-modules"
 
     # Check for --lib flag
     if [ "$1" = "--lib" ]; then
@@ -70,10 +87,18 @@ servertest() {
         fi
     fi
 
-    CMD="NODE_OPTIONS=\"--max-old-space-size=65536 --experimental-vm-modules\" node $DOORLOOP_PATH/node_modules/jest/bin/jest.js -c $JEST_CONFIG --runInBand $DYNAMIC_TEST_PATH $TEST_NAME_FILTER"
+    CMD="NODE_OPTIONS=\"$NODE_OPTIONS\" node $NODE_MODULES_PATH/jest/bin/jest.js -c $JEST_CONFIG --runInBand $DYNAMIC_TEST_PATH $TEST_NAME_FILTER"
 
     cd $TARGET_PATH
     echo $CMD
     eval $CMD
     cd $DOORLOOP_PATH
 }
+
+# Initialize all configurations
+init_dev_env
+setup_project_paths
+setup_strict_aliases
+setup_validation_aliases
+setup_utility_aliases
+setup_dev_aliases
