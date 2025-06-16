@@ -17,14 +17,54 @@ TOTAL_FILES=0
 FILES_WITH_CIRCULAR_DEPS=0
 CIRCULAR_DEPS_FOUND=0
 
+# Verbose flag
+VERBOSE=false
 
+# Function to parse command line arguments
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --verbose|-v)
+                VERBOSE=true
+                shift
+                ;;
+            --help|-h)
+                echo "Usage: $0 [--verbose|-v] [--help|-h]"
+                echo ""
+                echo "Options:"
+                echo "  --verbose, -v    Show detailed output including info and success messages"
+                echo "  --help, -h       Show this help message"
+                echo ""
+                echo "By default, only errors and warnings are shown."
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Use --help for usage information."
+                exit 1
+                ;;
+        esac
+    done
+}
 
 # Function to print colored output
 print_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    if [ "$VERBOSE" = true ]; then
+        echo -e "${BLUE}[INFO]${NC} $1"
+    fi
+}
+
+print_info_must() {
+    echo -e "${BLUE}[INFO]${NC} $1" >&2
 }
 
 print_success() {
+    if [ "$VERBOSE" = true ]; then
+        echo -e "${GREEN}[SUCCESS]${NC} $1"
+    fi
+}
+
+print_success_must() {
     echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
@@ -45,7 +85,7 @@ check_git_repo() {
     
     local repo_root
     repo_root=$(git rev-parse --show-toplevel)
-    print_info "Git repository root: $repo_root"
+    print_info_must "Git repository root: $repo_root"
 
 }
 
@@ -82,15 +122,16 @@ get_changed_files() {
     local base_branch="$1"
     local current_branch
     current_branch=$(git branch --show-current)
+
     
-    print_info "Current branch: $current_branch" >&2
+    print_info_must "Current branch: $current_branch"
+    print_info_must "Base branch: $base_branch"
     
-    print_info "Comparing branches:"
-    print_info "  Current branch: $current_branch"
-    print_info "  Base branch: $base_branch"
-    print_info "  Git diff command: git diff --name-only $base_branch...HEAD"
-    
-    print_info "Getting files changed in current PR..."
+    print_info "Git diff command: git diff --name-only $base_branch...HEAD"
+
+    echo "" >&2
+
+    print_info_must "Files changed in current PR:"
     
     local changed_files
     changed_files=$(git diff --name-only "$base_branch"...HEAD)
@@ -193,20 +234,22 @@ analyze_file() {
             
             print_error "Circular dependencies involving $file:"
             
-            if [ $chains -le 10 ]; then
-                # Show all if 10 or fewer
+            MAX_CIRCULAR_FILES_PER_OUTPUT=5
+
+            if [ $chains -le $MAX_CIRCULAR_FILES_PER_OUTPUT ]; then
+                # Show all if MAX_CIRCULAR_FILES_PER_OUTPUT or fewer
                 echo "$filtered_circular" | sed 's/^/    /'
             else
-                # Show first 10 and save all to file
-                print_info "Showing first 10 of $chains circular dependencies:"
-                echo "$filtered_circular" | head -10 | sed 's/^/    /'
+                # Show first MAX_CIRCULAR_FILES_PER_OUTPUT and save all to file
+                print_info "Showing first $MAX_CIRCULAR_FILES_PER_OUTPUT of $chains circular dependencies:"
+                echo "$filtered_circular" | head -$MAX_CIRCULAR_FILES_PER_OUTPUT | sed 's/^/    /'
                 
                 # Create filename with suffix
                 local file_base=$(basename "$file" | sed 's/\.[^.]*$//')
                 local output_file="circular-deps-${file_base}-$(date +%Y%m%d-%H%M%S).txt"
                 
                 echo ""
-                print_warning "⚠️  Found $chains circular dependencies in $file (showing first 10)"
+                print_warning "⚠️  Found $chains circular dependencies in $file (showing first $MAX_CIRCULAR_FILES_PER_OUTPUT)"
                 print_info "All circular dependencies for $file saved to: $output_file"
                 
                 # Save all dependencies to file
@@ -235,7 +278,7 @@ analyze_file() {
 analyze_files() {
     local js_ts_files="$1"
     
-    print_info "Checking for circular dependencies..."
+    print_info_must "Checking for circular dependencies..."
     echo ""
     
     while IFS= read -r file; do
@@ -246,34 +289,34 @@ analyze_files() {
 # Function to print summary and exit with appropriate code
 print_summary_and_exit() {
     echo ""
-    print_info "=== SUMMARY ==="
-    print_info "Total files analyzed: $TOTAL_FILES"
-    print_info "Files with circular dependencies: $FILES_WITH_CIRCULAR_DEPS"
-    print_info "Total circular dependency chains found: $CIRCULAR_DEPS_FOUND"
+    print_info_must "=== SUMMARY ==="
+    print_info_must "Total files analyzed: $TOTAL_FILES"
+    print_info_must "Files with circular dependencies: $FILES_WITH_CIRCULAR_DEPS"
+    print_info_must "Total circular dependency chains found: $CIRCULAR_DEPS_FOUND"
     
     if [ $FILES_WITH_CIRCULAR_DEPS -gt 0 ]; then
         echo ""
         print_error "❌ Circular dependencies detected!"
-        print_info "Consider refactoring the affected files to remove circular dependencies."
-        print_info "Circular dependencies can cause issues with bundling, testing, and runtime behavior."
+        print_info_must "Consider refactoring the affected files to remove circular dependencies."
+        print_info_must "Circular dependencies can cause issues with bundling, testing, and runtime behavior."
         exit 1
     else
         echo ""
-        print_success "✅ No circular dependencies found in changed files!"
+        print_success_must "✅ No circular dependencies found in changed files!"
         exit 0
     fi
 }
 
 # Main function
 main() {
+    parse_args "$@"
+    
     check_git_repo
     check_dependencies
     
     local base_branch
     base_branch=$(get_base_branch)
-    print_info "Base branch: $base_branch"
     
-
     local changed_files
     if ! changed_files=$(get_changed_files "$base_branch"); then
         exit 0
