@@ -40,6 +40,7 @@ setup_utility_aliases() {
     alias switchbranch="pnpm i && pnpm run build-dev"
     alias git-search='f() { git branch --format="%(refname:short)" | xargs -I {} git grep "$1" {}; }; f'
     alias editrc="cursor ~/.zshrc"
+    alias editbash="cursor ~/.bashrc"
     alias editprofile="cursor ~/.zprofile"
     alias pullall="git fetch --all && git pull --all"
 }
@@ -52,7 +53,7 @@ setup_dev_aliases() {
 
 # Server test function
 servertest() {
-    DYNAMIC_TEST_PATH="**/*.test.ts"
+    TEST_PATH_PATTERN=""
     TEST_NAME_FILTER=""
     TARGET_PATH="$SERVER_PATH"
     JEST_CONFIG="$SERVER_PATH/jest.config.ts"
@@ -71,7 +72,7 @@ servertest() {
         shift 2
         # Now $1 is test-file-filter, $2 is test-name-filter
         if [ ! -z "$1" ]; then
-            DYNAMIC_TEST_PATH="**/*$1*.test.ts"
+            TEST_PATH_PATTERN="--testPathPattern=\".*$1.*\.test\.ts$\""
         fi
         if [ ! -z "$2" ]; then
             TEST_NAME_FILTER="-t \"$2\""
@@ -79,7 +80,7 @@ servertest() {
     else
         # First arg filters test files
         if [ ! -z "$1" ]; then
-            DYNAMIC_TEST_PATH="**/*$1*.test.ts"
+            TEST_PATH_PATTERN="--testPathPattern=\".*$1.*\.test\.ts$\""
         fi
         # Second arg filters by test name
         if [ ! -z "$2" ]; then
@@ -87,7 +88,7 @@ servertest() {
         fi
     fi
 
-    CMD="NODE_OPTIONS=\"$NODE_OPTIONS\" node $NODE_MODULES_PATH/jest/bin/jest.js -c $JEST_CONFIG --runInBand $DYNAMIC_TEST_PATH $TEST_NAME_FILTER"
+    CMD="NODE_OPTIONS=\"$NODE_OPTIONS\" node $NODE_MODULES_PATH/jest/bin/jest.js -c $JEST_CONFIG --runInBand $TEST_PATH_PATTERN $TEST_NAME_FILTER"
 
     cd $TARGET_PATH
     echo $CMD
