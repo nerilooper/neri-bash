@@ -34,14 +34,14 @@ EXCLUDE_PATTERN=""
 
 # Function to display help message
 show_help() {
-    echo "Usage: $0 [--verbose|-v] [--base BRANCH] [--save|-s] [--file FILE] [--exclude PATTERN] [--help|-h]"
+    echo "Usage: $0 [--verbose|-v] [--base BRANCH] [--save|-s] [--file FILE] [--exclude PATTERNS] [--help|-h]"
     echo ""
     echo "Options:"
     echo "  --verbose, -v      Show detailed output including info and success messages"
     echo "  --base BRANCH      Specify the base branch to compare against (overrides auto-detection)"
     echo "  --save, -s         Save detailed circular dependency reports to files"
     echo "  --file FILE        Analyze a specific file instead of PR changed files"
-    echo "  --exclude PATTERN  Exclude files matching the glob pattern (shown in red)"
+    echo "  --exclude PATTERNS Exclude files matching the glob patterns (comma-separated, shown in red)"
     echo "  --help, -h         Show this help message"
     echo ""
     echo "By default, only errors and warnings are shown."
@@ -49,8 +49,10 @@ show_help() {
     echo "When --file is used, the base branch comparison is skipped."
     echo ""
     echo "Examples:"
-    echo "  $0 --exclude '*.test.js'     # Exclude test files"
-    echo "  $0 --exclude 'src/legacy/*'  # Exclude legacy directory"
+    echo "  $0 --exclude '*.test.js'                    # Exclude test files"
+    echo "  $0 --exclude 'src/legacy/*'                 # Exclude legacy directory"
+    echo "  $0 --exclude '*.test.js,*.spec.js'         # Exclude test and spec files"
+    echo "  $0 --exclude '*.test.js, src/legacy/*, *.d.ts' # Multiple patterns with spaces"
 }
 
 # Function to validate file path and convert to absolute path
@@ -112,7 +114,7 @@ parse_args() {
             ;;
         --exclude)
             if [[ -z "$2" || "$2" == --* ]]; then
-                echo "Error: --exclude requires a pattern"
+                echo "Error: --exclude requires one or more patterns (comma-separated)"
                 exit 1
             fi
             EXCLUDE_PATTERN="$2"
@@ -247,19 +249,26 @@ get_changed_files() {
     echo "$changed_files"
 }
 
-# Function to check if a file matches the exclude pattern
+# Function to check if a file matches any of the exclude patterns
 file_matches_exclude_pattern() {
     local file="$1"
-    local pattern="$2"
+    local patterns="$2"
 
-    if [ -z "$pattern" ]; then
-        return 1 # No pattern means no match
+    if [ -z "$patterns" ]; then
+        return 1 # No patterns means no match
     fi
 
-    # Use bash's built-in pattern matching
-    if [[ "$file" == $pattern ]]; then
-        return 0 # Match found
-    fi
+    # Split patterns by comma and check each one
+    IFS=',' read -ra PATTERN_ARRAY <<<"$patterns"
+    for pattern in "${PATTERN_ARRAY[@]}"; do
+        # Trim whitespace from pattern
+        pattern=$(echo "$pattern" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+        # Use bash's built-in pattern matching
+        if [[ "$file" == $pattern ]]; then
+            return 0 # Match found
+        fi
+    done
 
     return 1 # No match
 }
@@ -323,7 +332,11 @@ filter_js_ts_files() {
     echo "" >&2
 
     if [ -n "$EXCLUDE_PATTERN" ]; then
-        print_info_must "Excluded $excluded_count of $total_count files matching pattern: $EXCLUDE_PATTERN"
+        if [[ "$EXCLUDE_PATTERN" == *","* ]]; then
+            print_info_must "Excluded $excluded_count of $total_count files matching patterns: $EXCLUDE_PATTERN"
+        else
+            print_info_must "Excluded $excluded_count of $total_count files matching pattern: $EXCLUDE_PATTERN"
+        fi
         echo "" >&2
     fi
 
