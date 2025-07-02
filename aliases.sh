@@ -1,11 +1,11 @@
 # Initialize development environment
 init_dev_env() {
     export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"                   # This loads nvm
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion" # This loads nvm bash_completion
 
-    export BUN_INSTALL="$HOME/.bun" 
-    export PATH="$BUN_INSTALL/bin:$PATH" 
+    export BUN_INSTALL="$HOME/.bun"
+    export PATH="$BUN_INSTALL/bin:$PATH"
 }
 
 # Set up project paths
@@ -93,6 +93,52 @@ servertest() {
     echo $CMD
     eval $CMD
     cd $DOORLOOP_PATH
+}
+
+# TypeScript single file type check function
+typecheck_file() {
+    if [ -z "$1" ]; then
+        echo "Usage: typecheck_file <filepath>"
+        echo "Example: typecheck_file apps/server/src/api/capital/capital.controller.ts"
+        return 1
+    fi
+
+    local filepath="$1"
+    local temp_config="temp-typecheck.json"
+
+    # Check if file exists
+    if [ ! -f "$filepath" ]; then
+        echo "Error: File '$filepath' not found"
+        return 1
+    fi
+
+    # Determine if it's a test file or application file
+    local config_extends
+    if [[ "$filepath" == *".test.ts" ]] || [[ "$filepath" == *".spec.ts" ]] || [[ "$filepath" == *"__tests__"* ]] || [[ "$filepath" == *"jest.config.ts" ]]; then
+        config_extends="./apps/server/tsconfig.spec.json"
+        echo "Type-checking test file: $filepath"
+    else
+        config_extends="./apps/server/tsconfig.app.json"
+        echo "Type-checking application file: $filepath"
+    fi
+
+    # Create temporary config file
+    echo "{\"extends\":\"$config_extends\",\"include\":[\"$filepath\"]}" >"$temp_config"
+
+    # Run TypeScript compiler and filter output
+    echo "Running TypeScript compiler..."
+    local result=$(npx tsc --noEmit -p "$temp_config" 2>&1 | grep "$filepath")
+
+    # Clean up temporary file
+    rm "$temp_config"
+
+    # Display results
+    if [ -z "$result" ]; then
+        echo "✅ No type errors found in $filepath"
+    else
+        echo "❌ Type errors found:"
+        echo "$result"
+    fi
 }
 
 # Initialize all configurations
