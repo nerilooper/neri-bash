@@ -290,7 +290,6 @@ filter_js_ts_files() {
     local changed_files="$1"
     local js_ts_files
     js_ts_files=$(echo "$changed_files" | grep -E '\.(js|jsx|ts|tsx|mjs|cjs)$' || true)
-
     if [ -z "$js_ts_files" ]; then
         print_warning "No JavaScript/TypeScript files found in changed files"
         return 1
@@ -352,13 +351,11 @@ filter_js_ts_files() {
 filter_circular_deps_for_file() {
     local file="$1"
     local circular_output="$2"
-
     # Get the base name of the analyzed file for comparison
     local analyzed_file_base
     local analyzed_file_path_no_ext
     analyzed_file_base=$(basename "$file" | sed 's/\.[^.]*$//')
     analyzed_file_path_no_ext=$(echo "$file" | sed 's/\.[^.]*$//')
-
     # Filter circular dependencies to only show those involving the analyzed file
     local filtered_circular=""
     while IFS= read -r line; do
@@ -510,7 +507,6 @@ print_summary_and_exit() {
     print_info_must "Total files analyzed: $TOTAL_FILES"
     print_info_must "Files with circular dependencies: $FILES_WITH_CIRCULAR_DEPS"
     print_info_must "Total circular dependency chains found: $CIRCULAR_DEPS_FOUND"
-
     if [ $FILES_WITH_CIRCULAR_DEPS -gt 0 ]; then
         echo ""
         print_error "❌ Circular dependencies detected!"
