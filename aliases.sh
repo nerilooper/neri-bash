@@ -97,7 +97,6 @@ servertest() {
 }
 
 # TypeScript single file type check function
-# TypeScript single file type check function
 typecheck_file() {
     if [ -z "$1" ]; then
         echo "Usage: typecheck_file <filepath>"
