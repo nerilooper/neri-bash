@@ -124,7 +124,7 @@ typecheck_file() {
     fi
 
     # Create temporary config file
-    echo "{\"extends\":\"$config_extends\",\"include\":[\"$filepath\"]}" >"$temp_config"
+    echo "{\"extends\":\"$config_extends\",\"include\":[\"$filepath\", \"**/*.d.ts\"]}" >"$temp_config"
 
     # Run TypeScript compiler and filter output
     echo "Running TypeScript compiler..."
