@@ -96,6 +96,72 @@ servertest() {
     cd $DOORLOOP_PATH
 }
 
+
+# Client test function
+clienttest() {
+    TEST_PATH_PATTERN=""
+    TEST_NAME_FILTER=""
+    EXTRA_ARGS=""
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --watch|-w)
+                EXTRA_ARGS="$EXTRA_ARGS --watch"
+                shift
+                ;;
+            --coverage)
+                EXTRA_ARGS="$EXTRA_ARGS --coverage"
+                shift
+                ;;
+            --ui)
+                EXTRA_ARGS="$EXTRA_ARGS --ui"
+                shift
+                ;;
+            -t|--testNamePattern)
+                if [ ! -z "$2" ]; then
+                    TEST_NAME_FILTER="-t \"$2\""
+                    shift 2
+                else
+                    echo "Error: --testNamePattern requires a value"
+                    return 1
+                fi
+                ;;
+            *)
+                # First non-flag argument is test file filter
+                if [ -z "$TEST_PATH_PATTERN" ]; then
+                    TEST_PATH_PATTERN="$1"
+                # Second non-flag argument is test name filter (if -t wasn't used)
+                elif [ -z "$TEST_NAME_FILTER" ]; then
+                    TEST_NAME_FILTER="-t \"$1\""
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # Build the command
+    CMD="nx run client:test"
+    
+    # Add test file pattern if specified
+    if [ ! -z "$TEST_PATH_PATTERN" ]; then
+        CMD="$CMD $TEST_PATH_PATTERN"
+    fi
+    
+    # Add test name filter if specified
+    if [ ! -z "$TEST_NAME_FILTER" ]; then
+        CMD="$CMD $TEST_NAME_FILTER"
+    fi
+    
+    # Add extra arguments
+    if [ ! -z "$EXTRA_ARGS" ]; then
+        CMD="$CMD $EXTRA_ARGS"
+    fi
+
+    echo "Running: $CMD"
+    eval $CMD
+}
+
 # TypeScript single file type check function
 typecheck_file() {
     if [ -z "$1" ]; then
