@@ -43,6 +43,29 @@ setup_utility_aliases() {
     alias editbash="cursor ~/.bashrc"
     alias editprofile="cursor ~/.zprofile"
     alias pullall="git fetch --all && git pull --all"
+
+    # GitHub CLI aliases (gh prefix for GitHub commands)
+    # Repository operations
+    alias ghv="gh repo view --web"           # Open current repo in browser
+    alias ghclone="gh repo clone"            # Clone with GitHub CLI
+    alias ghfork="gh repo fork"              # Fork repository
+
+    # Pull Request operations
+    alias ghpr="PAGER= gh pr list"           # List pull requests
+    alias ghprc="gh pr create"               # Create pull request
+    alias ghprv="gh pr view --web"           # View PR in browser
+    alias ghprs="PAGER= gh pr status"        # PR status
+    alias ghprco="gh pr checkout"            # Checkout PR locally
+
+    # Custom workflow aliases
+    # My PRs - PRs authored by me
+    alias ghmyprs="PAGER= gh pr list --author @me --state open"
+
+    # My reviews - PRs where I'm requested as reviewer
+    alias ghmyreviews="PAGER= gh pr list --search 'is:open is:pr review-requested:@me'"
+
+    # Quick status overview (great for Arc live folders)
+    alias ghstatus="echo '=== My PRs ===' && ghmyprs && echo '\n=== My Reviews ===' && ghmyreviews"
 }
 
 # Create development-specific aliases
