@@ -68,6 +68,34 @@ setup_utility_aliases() {
     alias ghstatus="echo '=== My PRs ===' && ghmyprs && echo '\n=== My Reviews ===' && ghmyreviews"
 }
 
+# Git blame with latest edit info
+git_blame_latest() {
+    if [ -z "$1" ]; then
+        echo "Usage: git_blame_latest <file_path>"
+        echo "Example: git_blame_latest apps/client/src/components/file.ts"
+        return 1
+    fi
+    
+    local file_path="$1"
+    
+    # Get the latest commit hash for this file
+    local latest_commit=$(git log -1 --format="%H" -- "$file_path")
+    
+    if [ -z "$latest_commit" ]; then
+        echo "No commits found for file: $file_path"
+        return 1
+    fi
+    
+    echo "=== Latest Edit Information ==="
+    # Get commit details
+    git log -1 --format="Author: %an <%ae>%nDate: %aI%nCommit: %H%nMessage: %s" "$latest_commit"
+    
+    echo ""
+    echo "=== 10 Lines of Change Diff ==="
+    # Get the diff for this specific file
+    git show "$latest_commit" -- "$file_path"
+}
+
 # Create development-specific aliases
 setup_dev_aliases() {
     alias storybook="cd $CLIENT_PATH && pnpm run storybook"
