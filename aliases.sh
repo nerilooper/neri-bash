@@ -34,6 +34,11 @@ setup_validation_aliases() {
     alias valfull="pnpm i && pnpm run build-prod && (strictoff && pnpm run type-check-strict && stricton)"
 }
 
+# Project specific commands
+project_commands() {
+    alias docker-debug-dev="pnpm USE_DOCKER=true pnpm debug-dev"
+}
+
 # Create general utility aliases
 setup_utility_aliases() {
     alias aicli="gh copilot suggest"
@@ -123,7 +128,10 @@ servertest() {
         shift 2
         # Now $1 is test-file-filter, $2 is test-name-filter
         if [ ! -z "$1" ]; then
-            TEST_PATH_PATTERN="--testPathPattern=\".*$1.*\.test\.ts$\""
+            TEST_PATH_PATTERN="--testPathPattern=\".*libs/$LIB_NAME.*$1.*\.test\.ts$\""
+        else
+            # Default to lib path pattern when no specific filter is provided
+            TEST_PATH_PATTERN="--testPathPattern=\".*libs/$LIB_NAME.*\.test\.ts$\""
         fi
         if [ ! -z "$2" ]; then
             TEST_NAME_FILTER="-t \"$2\""
@@ -131,7 +139,10 @@ servertest() {
     else
         # First arg filters test files
         if [ ! -z "$1" ]; then
-            TEST_PATH_PATTERN="--testPathPattern=\".*$1.*\.test\.ts$\""
+            TEST_PATH_PATTERN="--testPathPattern=\".*apps/server.*$1.*\.test\.ts$\""
+        else
+            # Default to server path pattern when no specific filter is provided
+            TEST_PATH_PATTERN="--testPathPattern=\".*apps/server.*\.test\.ts$\""
         fi
         # Second arg filters by test name
         if [ ! -z "$2" ]; then
@@ -153,10 +164,22 @@ clienttest() {
     TEST_PATH_PATTERN=""
     TEST_NAME_FILTER=""
     EXTRA_ARGS=""
+    IS_LIB_TEST=false
+    LIB_NAME=""
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
+            --lib)
+                if [ ! -z "$2" ]; then
+                    IS_LIB_TEST=true
+                    LIB_NAME="$2"
+                    shift 2
+                else
+                    echo "Usage: clienttest --lib <libname> [test-file-filter] [test-name-filter]"
+                    return 1
+                fi
+                ;;
             --watch|-w)
                 EXTRA_ARGS="$EXTRA_ARGS --watch"
                 shift
@@ -181,7 +204,13 @@ clienttest() {
             *)
                 # First non-flag argument is test file filter
                 if [ -z "$TEST_PATH_PATTERN" ]; then
-                    TEST_PATH_PATTERN="$1"
+                    if [ "$IS_LIB_TEST" = true ]; then
+                        # For lib tests, include the lib path in the pattern
+                        TEST_PATH_PATTERN="libs/$LIB_NAME.*$1"
+                    else
+                        # For client tests, include the client path in the pattern
+                        TEST_PATH_PATTERN="apps/client.*$1"
+                    fi
                 # Second non-flag argument is test name filter (if -t wasn't used)
                 elif [ -z "$TEST_NAME_FILTER" ]; then
                     TEST_NAME_FILTER="-t \"$1\""
@@ -191,10 +220,19 @@ clienttest() {
         esac
     done
 
+    # Set default path pattern if none specified
+    if [ -z "$TEST_PATH_PATTERN" ]; then
+        if [ "$IS_LIB_TEST" = true ]; then
+            TEST_PATH_PATTERN="libs/$LIB_NAME"
+        else
+            TEST_PATH_PATTERN="apps/client"
+        fi
+    fi
+
     # Build the command
     CMD="nx run client:test"
     
-    # Add test file pattern if specified
+    # Add test file pattern
     if [ ! -z "$TEST_PATH_PATTERN" ]; then
         CMD="$CMD $TEST_PATH_PATTERN"
     fi
