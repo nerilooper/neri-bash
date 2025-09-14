@@ -34,9 +34,10 @@ setup_validation_aliases() {
     alias valfull="pnpm i && pnpm run build-prod && (strictoff && pnpm run type-check-strict && stricton)"
 }
 
+
 # Project specific commands
 project_commands() {
-    alias docker-debug-dev="pnpm USE_DOCKER=true pnpm debug-dev"
+    alias docker-debug-dev="USE_DOCKER=true pnpm debug-dev"
 }
 
 # Create general utility aliases
@@ -304,3 +305,4 @@ setup_strict_aliases
 setup_validation_aliases
 setup_utility_aliases
 setup_dev_aliases
+project_commands
