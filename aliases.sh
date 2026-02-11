@@ -10,7 +10,7 @@ init_dev_env() {
 
 # Set up project paths
 setup_project_paths() {
-    # Project paths
+    # DoorLoop
     if [[ "$(pwd)" == *"/apps/server"* ]]; then
         export DOORLOOP_PATH="$(dirname "$(dirname "$(pwd)")")"
     else
@@ -19,6 +19,9 @@ setup_project_paths() {
 
     export SERVER_PATH="$DOORLOOP_PATH/apps/server"
     export CLIENT_PATH="$DOORLOOP_PATH/apps/client"
+
+
+    export NOTION_SYNC_PATH="$DEVELOPER_PATH/notion-docs-sync"
 }
 
 # Create TypeScript strict mode aliases
@@ -34,10 +37,17 @@ setup_validation_aliases() {
     alias valfull="pnpm i && pnpm run build-prod && (strictoff && pnpm run type-check-strict && stricton)"
 }
 
+setup_global_aliases() {
+    alias sync-notion="CURRENT_DIR=$(pwd) && cd $NOTION_SYNC_PATH && bun run sync $@ && cd $CURRENT_DIR"
+}
 
 # Project specific commands
 project_commands() {
     alias docker-debug-dev="USE_DOCKER=true pnpm debug-dev"
+    verify-affected-libs() {
+        local base="${1:-origin/master}"
+        nx affected -t lint,typecheck,test --base="$base" --head=HEAD --exclude='*,!tag:type:lib'
+    }
 }
 
 # Create general utility aliases
@@ -46,66 +56,24 @@ setup_utility_aliases() {
     alias switchbranch="pnpm i && pnpm run build-dev"
     alias git-search='f() { git branch --format="%(refname:short)" | xargs -I {} git grep "$1" {}; }; f'
     alias editrc="cursor ~/.zshrc"
-    alias editbash="cursor ~/.bashrc"
     alias editprofile="cursor ~/.zprofile"
+    alias sourceprofile="source ~/.zprofile"
     alias pullall="git fetch --all && git pull --all"
-
-    # GitHub CLI aliases (gh prefix for GitHub commands)
-    # Repository operations
-    alias ghv="gh repo view --web"           # Open current repo in browser
-    alias ghclone="gh repo clone"            # Clone with GitHub CLI
-    alias ghfork="gh repo fork"              # Fork repository
-
-    # Pull Request operations
-    alias ghpr="PAGER= gh pr list"           # List pull requests
-    alias ghprc="gh pr create"               # Create pull request
-    alias ghprv="gh pr view --web"           # View PR in browser
-    alias ghprs="PAGER= gh pr status"        # PR status
-    alias ghprco="gh pr checkout"            # Checkout PR locally
-
-    # Custom workflow aliases
-    # My PRs - PRs authored by me
-    alias ghmyprs="PAGER= gh pr list --author @me --state open"
-
-    # My reviews - PRs where I'm requested as reviewer
-    alias ghmyreviews="PAGER= gh pr list --search 'is:open is:pr review-requested:@me'"
-
-    # Quick status overview (great for Arc live folders)
-    alias ghstatus="echo '=== My PRs ===' && ghmyprs && echo '\n=== My Reviews ===' && ghmyreviews"
-}
-
-# Git blame with latest edit info
-git_blame_latest() {
-    if [ -z "$1" ]; then
-        echo "Usage: git_blame_latest <file_path>"
-        echo "Example: git_blame_latest apps/client/src/components/file.ts"
-        return 1
-    fi
-    
-    local file_path="$1"
-    
-    # Get the latest commit hash for this file
-    local latest_commit=$(git log -1 --format="%H" -- "$file_path")
-    
-    if [ -z "$latest_commit" ]; then
-        echo "No commits found for file: $file_path"
-        return 1
-    fi
-    
-    echo "=== Latest Edit Information ==="
-    # Get commit details
-    git log -1 --format="Author: %an <%ae>%nDate: %aI%nCommit: %H%nMessage: %s" "$latest_commit"
-    
-    echo ""
-    echo "=== 10 Lines of Change Diff ==="
-    # Get the diff for this specific file
-    git show "$latest_commit" -- "$file_path"
 }
 
 # Create development-specific aliases
 setup_dev_aliases() {
     alias storybook="cd $CLIENT_PATH && pnpm run storybook"
-    alias docker-debug="pnpm docker-bootstrap 651d09f9a3895d22c843074a && USE_DOCKER=true pnpm debug-dev"
+    alias docker-debug="USE_DOCKER=true pnpm debug-dev"
+    alias docker-dump-dev="pnpm run docker:remote:dump -i 651d09f9a3895d22c843074a -e nrosner@doorloop.com -e nrosner+benjadover@doorloop.com"
+    alias docker-pump-dev="pnpm run docker:pump -i 651d09f9a3895d22c843074a"
+
+    alias ef-dev="USE_STRIPE_TREASURY_DEVELOPMENT_ACCOUNT=true TEMPORAL_ENABLED=true TELEMETRY_ENABLED=true OTEL_ENABLED=true USE_DOCKER=true pnpm run debug-dev"
+    alias ef-dev-remote="USE_STRIPE_TREASURY_DEVELOPMENT_ACCOUNT=true TEMPORAL_ENABLED=true TELEMETRY_ENABLED=true OTEL_ENABLED=true USE_DOCKER=true pnpm run debug-dev"
+    alias ef-dev-backend="USE_STRIPE_TREASURY_DEVELOPMENT_ACCOUNT=true TEMPORAL_ENABLED=true TELEMETRY_ENABLED=true OTEL_ENABLED=true USE_DOCKER=true nx run server:debug-dev --outputStyle=stream"
+
+    alias ef-check="nx run-many -t lint,typecheck,test -p embedded-financing-server-transactions"
+    alias ef-check-full="ef-check && nx run-many -t typecheck,lint -p server"
 }
 
 # Server test function
@@ -159,28 +127,15 @@ servertest() {
     cd $DOORLOOP_PATH
 }
 
-
 # Client test function
 clienttest() {
     TEST_PATH_PATTERN=""
     TEST_NAME_FILTER=""
     EXTRA_ARGS=""
-    IS_LIB_TEST=false
-    LIB_NAME=""
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --lib)
-                if [ ! -z "$2" ]; then
-                    IS_LIB_TEST=true
-                    LIB_NAME="$2"
-                    shift 2
-                else
-                    echo "Usage: clienttest --lib <libname> [test-file-filter] [test-name-filter]"
-                    return 1
-                fi
-                ;;
             --watch|-w)
                 EXTRA_ARGS="$EXTRA_ARGS --watch"
                 shift
@@ -205,13 +160,7 @@ clienttest() {
             *)
                 # First non-flag argument is test file filter
                 if [ -z "$TEST_PATH_PATTERN" ]; then
-                    if [ "$IS_LIB_TEST" = true ]; then
-                        # For lib tests, include the lib path in the pattern
-                        TEST_PATH_PATTERN="libs/$LIB_NAME.*$1"
-                    else
-                        # For client tests, include the client path in the pattern
-                        TEST_PATH_PATTERN="apps/client.*$1"
-                    fi
+                    TEST_PATH_PATTERN="$1"
                 # Second non-flag argument is test name filter (if -t wasn't used)
                 elif [ -z "$TEST_NAME_FILTER" ]; then
                     TEST_NAME_FILTER="-t \"$1\""
@@ -221,19 +170,10 @@ clienttest() {
         esac
     done
 
-    # Set default path pattern if none specified
-    if [ -z "$TEST_PATH_PATTERN" ]; then
-        if [ "$IS_LIB_TEST" = true ]; then
-            TEST_PATH_PATTERN="libs/$LIB_NAME"
-        else
-            TEST_PATH_PATTERN="apps/client"
-        fi
-    fi
-
     # Build the command
     CMD="nx run client:test"
     
-    # Add test file pattern
+    # Add test file pattern if specified
     if [ ! -z "$TEST_PATH_PATTERN" ]; then
         CMD="$CMD $TEST_PATH_PATTERN"
     fi
@@ -298,6 +238,36 @@ typecheck_file() {
     fi
 }
 
+
+# Git blame with latest edit info
+git_blame_latest() {
+    if [ -z "$1" ]; then
+        echo "Usage: git_blame_latest <file_path>"
+        echo "Example: git_blame_latest apps/client/src/components/file.ts"
+        return 1
+    fi
+    
+    local file_path="$1"
+    
+    # Get the latest commit hash for this file
+    local latest_commit=$(git log -1 --format="%H" -- "$file_path")
+    
+    if [ -z "$latest_commit" ]; then
+        echo "No commits found for file: $file_path"
+        return 1
+    fi
+    
+    echo "=== Latest Edit Information ==="
+    # Get commit details
+    git log -1 --format="Author: %an <%ae>%nDate: %aI%nCommit: %H%nMessage: %s" "$latest_commit"
+    
+    echo ""
+    echo "=== 10 Lines of Change Diff ==="
+    # Get the diff for this specific file
+    git show "$latest_commit" -- "$file_path"
+}
+
+
 # Initialize all configurations
 init_dev_env
 setup_project_paths
@@ -306,3 +276,4 @@ setup_validation_aliases
 setup_utility_aliases
 setup_dev_aliases
 project_commands
+setup_global_aliases
