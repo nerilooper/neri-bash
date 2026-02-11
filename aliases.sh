@@ -1,3 +1,4 @@
+
 # Initialize development environment
 init_dev_env() {
     export NVM_DIR="$HOME/.nvm"
@@ -10,7 +11,7 @@ init_dev_env() {
 
 # Set up project paths
 setup_project_paths() {
-    # Project paths
+    # DoorLoop
     if [[ "$(pwd)" == *"/apps/server"* ]]; then
         export DOORLOOP_PATH="$(dirname "$(dirname "$(pwd)")")"
     else
@@ -19,6 +20,9 @@ setup_project_paths() {
 
     export SERVER_PATH="$DOORLOOP_PATH/apps/server"
     export CLIENT_PATH="$DOORLOOP_PATH/apps/client"
+
+
+    export NOTION_SYNC_PATH="$DEVELOPER_PATH/notion-docs-sync"
 }
 
 # Create TypeScript strict mode aliases
@@ -34,10 +38,17 @@ setup_validation_aliases() {
     alias valfull="pnpm i && pnpm run build-prod && (strictoff && pnpm run type-check-strict && stricton)"
 }
 
+setup_global_aliases() {
+    alias sync-notion="CURRENT_DIR=$(pwd) && cd $NOTION_SYNC_PATH && bun run sync $@ && cd $CURRENT_DIR"
+}
 
 # Project specific commands
 project_commands() {
     alias docker-debug-dev="USE_DOCKER=true pnpm debug-dev"
+    verify-affected-libs() {
+        local base="${1:-origin/master}"
+        nx affected -t lint,typecheck,test --base="$base" --head=HEAD --exclude='*,!tag:type:lib'
+    }
 }
 
 # Create general utility aliases
@@ -48,6 +59,7 @@ setup_utility_aliases() {
     alias editrc="cursor ~/.zshrc"
     alias editbash="cursor ~/.bashrc"
     alias editprofile="cursor ~/.zprofile"
+    alias sourceprofile="source ~/.zprofile"
     alias pullall="git fetch --all && git pull --all"
 
     # GitHub CLI aliases (gh prefix for GitHub commands)
@@ -105,7 +117,16 @@ git_blame_latest() {
 # Create development-specific aliases
 setup_dev_aliases() {
     alias storybook="cd $CLIENT_PATH && pnpm run storybook"
-    alias docker-debug="pnpm docker-bootstrap 651d09f9a3895d22c843074a && USE_DOCKER=true pnpm debug-dev"
+    alias docker-debug="USE_DOCKER=true pnpm debug-dev"
+    alias docker-dump-dev="pnpm run docker:remote:dump -i 651d09f9a3895d22c843074a -e nrosner@doorloop.com -e nrosner+benjadover@doorloop.com"
+    alias docker-pump-dev="pnpm run docker:pump -i 651d09f9a3895d22c843074a"
+
+    alias ef-dev="USE_STRIPE_TREASURY_DEVELOPMENT_ACCOUNT=true TEMPORAL_ENABLED=true TELEMETRY_ENABLED=true OTEL_ENABLED=true USE_DOCKER=true pnpm run debug-dev"
+    alias ef-dev-remote="USE_STRIPE_TREASURY_DEVELOPMENT_ACCOUNT=true TEMPORAL_ENABLED=true TELEMETRY_ENABLED=true OTEL_ENABLED=true USE_DOCKER=true pnpm run debug-dev"
+    alias ef-dev-backend="USE_STRIPE_TREASURY_DEVELOPMENT_ACCOUNT=true TEMPORAL_ENABLED=true TELEMETRY_ENABLED=true OTEL_ENABLED=true USE_DOCKER=true nx run server:debug-dev --outputStyle=stream"
+
+    alias ef-check="nx run-many -t lint,typecheck,test -p embedded-financing-server-transactions"
+    alias ef-check-full="ef-check && nx run-many -t typecheck,lint -p server"
 }
 
 # Server test function
@@ -298,6 +319,7 @@ typecheck_file() {
     fi
 }
 
+
 # Initialize all configurations
 init_dev_env
 setup_project_paths
@@ -306,3 +328,4 @@ setup_validation_aliases
 setup_utility_aliases
 setup_dev_aliases
 project_commands
+setup_global_aliases
