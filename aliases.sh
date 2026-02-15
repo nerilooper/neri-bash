@@ -319,6 +319,39 @@ typecheck_file() {
     fi
 }
 
+# Export git stashes as patches and push to GitHub
+export_stashes() {
+    local stash_dir="/tmp/stashes"
+    local orig_dir="$(pwd)"
+
+    mkdir -p "$stash_dir"
+
+    echo "Creating stash directory and initializing git repo"
+
+    # Init repo if not already a git repo
+    if [ ! -d "$stash_dir/.git" ]; then
+        git -C "$stash_dir" init
+        git -C "$stash_dir" remote add origin https://github.com/nerilooper/stashes.git
+        git -C "$stash_dir" checkout -b main
+    fi
+
+    echo "Exporting stashes to $stash_dir"
+
+    # Export all stashes as patches
+    git stash list | while IFS=: read -r ref desc; do
+        safe_desc=$(echo "$desc" | sed 's/^[[:space:]]*//; s/[^a-zA-Z0-9._-]/_/g')
+        git stash show -p "$ref" > "$stash_dir/stash-${ref//\//-}-${safe_desc}.patch"
+    done
+
+    echo "Committing and pushing stashes"
+
+    # Commit and push
+    git -C "$stash_dir" add -A
+    git -C "$stash_dir" commit -m "update stashes $(date +%Y-%m-%d_%H:%M:%S)" 2>/dev/null || echo "No stash changes to commit"
+    git -C "$stash_dir" push -u origin main
+
+    echo "Stashes exported successfully"
+}
 
 # Initialize all configurations
 init_dev_env
