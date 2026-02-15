@@ -323,6 +323,7 @@ typecheck_file() {
 export_stashes() {
     local stash_dir="/tmp/stashes"
     local orig_dir="$(pwd)"
+    local remote_url="https://github.com/nerilooper/stashes.git"
 
     mkdir -p "$stash_dir"
 
@@ -331,7 +332,7 @@ export_stashes() {
     # Init repo if not already a git repo
     if [ ! -d "$stash_dir/.git" ]; then
         git -C "$stash_dir" init
-        git -C "$stash_dir" remote add origin https://github.com/nerilooper/stashes.git
+        git -C "$stash_dir" remote add origin $remote_url
         git -C "$stash_dir" checkout -b main
     fi
 
