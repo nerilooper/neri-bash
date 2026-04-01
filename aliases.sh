@@ -1,4 +1,6 @@
 
+DEVELOPER_PATH="~/Developer"
+
 # Initialize development environment
 init_dev_env() {
     export NVM_DIR="$HOME/.nvm"
@@ -49,6 +51,12 @@ project_commands() {
         local base="${1:-origin/master}"
         nx affected -t lint,typecheck,test --base="$base" --head=HEAD --exclude='*,!tag:type:lib'
     }
+
+    # DoorLoop: list changed test files vs origin/master
+    alias dl-changed-tests='git diff --name-only origin/master...HEAD | grep "apps/server/.*\.test\.ts$"'
+
+    # DoorLoop: run each changed test file
+    alias dl-run-changed-tests='git diff --name-only origin/master...HEAD | grep "apps/server/.*\.test\.ts$" | xargs -I{} pnpm test:file {}'
 }
 
 # Create general utility aliases
@@ -125,7 +133,7 @@ setup_dev_aliases() {
     alias ef-dev-remote="USE_STRIPE_TREASURY_DEVELOPMENT_ACCOUNT=true TEMPORAL_ENABLED=true TELEMETRY_ENABLED=true OTEL_ENABLED=true USE_DOCKER=true pnpm run debug-dev"
     alias ef-dev-backend="USE_STRIPE_TREASURY_DEVELOPMENT_ACCOUNT=true TEMPORAL_ENABLED=true TELEMETRY_ENABLED=true OTEL_ENABLED=true USE_DOCKER=true nx run server:debug-dev --outputStyle=stream"
 
-    alias ef-check="nx run-many -t lint,typecheck,test -p embedded-financing-server-transactions"
+    alias ef-check="nx run-many -t lint,typecheck,test -p embedded-financing-balance-process,embedded-financing-balance-scheduling,embedded-financing-flow-of-funds-tracking,embedded-financing-transaction-availability-status,embedded-financing-treasury-income"
     alias ef-check-full="ef-check && nx run-many -t typecheck,lint -p server"
 }
 
@@ -319,6 +327,7 @@ typecheck_file() {
     fi
 }
 
+
 # Export git stashes as patches and push to GitHub
 export_stashes() {
     local stash_dir="/tmp/stashes"
@@ -353,6 +362,87 @@ export_stashes() {
 
     echo "Stashes exported successfully"
 }
+
+# DoorLoop: lint only changed lines vs master
+dl-lint-changed() {
+    local base="${1:-origin/master}"
+    local lint_output="/tmp/server-lint-output.txt"
+    local lint_clean="/tmp/server-lint-clean.txt"
+    local changed_lines_file="/tmp/server-lint-changed-lines.txt"
+    local result="/tmp/server-lint-changed.txt"
+
+    # Run lint if output doesn't exist or --run flag passed
+    if [ "$2" = "--run" ] || [ ! -f "$lint_output" ]; then
+        echo "Running server:lint..."
+        pnpm nx run server:lint 2>&1 > "$lint_output"
+    else
+        echo "Reusing existing $lint_output (pass --run as 2nd arg to re-run)"
+    fi
+
+    # Strip ANSI codes once
+    sed 's/\x1b\[[0-9;]*m//g' "$lint_output" > "$lint_clean"
+
+    # Build changed lines lookup: file:linenum for all changed files
+    > "$changed_lines_file"
+    git diff --name-only "$base"...HEAD -- apps/server/src/ | while IFS= read -r file; do
+        local full_path="$(pwd)/$file"
+        git diff "$base"...HEAD -- "$file" | sed -n 's/^@@ .* +\([0-9]*\),\{0,1\}\([0-9]*\) @@.*/\1 \2/p' | while read -r start count; do
+            count="${count:-1}"
+            [ "$count" -eq 0 ] && continue
+            for ((i=start; i<start+count; i++)); do
+                echo "$full_path:$i" >> "$changed_lines_file"
+            done
+        done
+    done
+
+    if [ ! -s "$changed_lines_file" ]; then
+        echo "No changed server lines found."
+        return 0
+    fi
+
+    # Use awk to match lint warnings against changed lines
+    awk '
+    NR==FNR { changed[$0]=1; next }
+    /^\// { current_file=$0; next }
+    current_file && /^[[:space:]]*[0-9]+:[0-9]+/ {
+        line=$0
+        sub(/^[[:space:]]+/, "", line)
+        split(line, parts, ":")
+        key = current_file ":" parts[1]
+        if (key in changed) {
+            if (current_file != last_file) {
+                print ""
+                print current_file
+                last_file = current_file
+            }
+            print $0
+            total++
+        }
+    }
+    END { printf "\nTotal warnings on changed lines: %d\n", total+0 }
+    ' "$changed_lines_file" "$lint_clean" | tee "$result"
+
+    echo ""
+    echo "Full lint output: $lint_output"
+    echo "Filtered output:  $result"
+}
+
+banking-claude() {
+    local env="${1:-dev}"
+    local env_args=()
+    local api_keys
+
+    if [[ "$env" == "prod" ]]; then
+        env_args=(--env prod)
+    fi
+
+    echo "getting api keys"
+
+    api_keys="$(infisical secrets --projectId 2081b709-ad08-4616-8053-88e681189766 "${env_args[@]}" --output json | jq -r '[.[].secretKey] | join(" ")')"
+
+    infisical run --projectId 2081b709-ad08-4616-8053-88e681189766 "${env_args[@]}" -- claude "you have the following api keys: $api_keys. wait for instructions"
+}
+
 
 # Initialize all configurations
 init_dev_env
